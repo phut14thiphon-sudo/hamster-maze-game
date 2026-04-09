@@ -252,6 +252,155 @@
     </script>
 </body>
 </html>
+            databaseURL: "https://thesightlessgame-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "thesightlessgame",
+            storageBucket: "thesightlessgame.firebasestorage.app",
+            messagingSenderId: "608644663832",
+            appId: "1:608644663832:web:74f24a6b3a9ee2d4ab916d"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+        const gameRef = ref(db, 'maze/multi_level');
+
+        const player = document.getElementById('player');
+        const fog = document.getElementById('fog');
+        const mazeContainer = document.getElementById('maze-container');
+        const statusText = document.getElementById('status');
+        const levelDisplay = document.getElementById('level-display');
+        const winOverlay = document.getElementById('win-overlay');
+
+        let role = '';
+        let currentLevel = 1;
+        let lastCheckpoint = { x: 32, y: 32 };
+
+        const mazes = {
+            1: [[1,1,1,1,1],[1,0,0,0,3],[1,1,1,1,1]], 
+            2: [[1,1,1,1,1],[1,0,1,0,1],[1,0,0,0,3],[1,1,1,1,1]],
+            3: [[1,1,1,1,1,1,1],[1,0,0,0,1,0,1],[1,1,1,0,0,0,1],[1,3,0,0,1,1,1],[1,1,1,1,1,1,1]],
+            4: [[1,1,1,1,1,1,1,1,1],[1,0,0,0,0,0,0,0,1],[1,1,1,1,1,1,1,0,1],[1,0,0,0,0,0,0,0,1],[1,0,1,1,1,1,1,1,1],[1,0,0,0,0,0,0,3,1],[1,1,1,1,1,1,1,1,1]],
+            5: [[1,1,1,1,1,1,1,1,1],[1,0,1,0,0,0,1,0,1],[1,0,1,0,1,0,1,0,1],[1,0,0,0,1,0,0,0,1],[1,1,1,0,1,1,1,0,1],[1,3,0,0,0,0,0,0,1],[1,1,1,1,1,1,1,1,1]],
+            6: [[1,1,1,1,1,1,1,1,1,1,1],[1,0,0,0,0,0,0,0,0,0,1],[1,0,1,1,1,1,1,1,1,1,1],[1,0,0,0,0,0,0,0,0,0,1],[1,1,1,1,1,1,1,1,1,0,1],[1,0,0,0,0,0,0,0,0,0,1],[1,0,1,1,1,1,1,1,1,1,1],[1,0,0,0,0,0,0,0,0,3,1],[1,1,1,1,1,1,1,1,1,1,1]],
+            7: [[1,1,1,1,1,1,1,1,1,1,1,1,1],[1,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,1,1,1,1,1,1,1,1,1,0,1],[1,0,1,0,0,0,0,0,0,0,1,0,1],[1,0,1,0,1,1,1,1,1,0,1,0,1],[1,0,0,0,1,3,0,0,0,0,1,0,1],[1,1,1,1,1,1,1,1,1,1,1,1,1]],
+            8: [[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],[1,0,0,0,1,0,0,0,0,0,1,0,0,0,1],[1,0,1,0,1,0,1,1,1,0,1,0,1,0,1],[1,0,1,0,0,0,1,2,1,0,0,0,1,0,1],[1,0,1,1,1,1,1,0,1,1,1,0,1,0,1],[1,0,0,0,0,0,0,0,0,0,1,0,0,0,1],[1,1,1,1,1,1,1,1,1,0,1,1,1,3,1],[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]],
+            9: [[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,1,1,1,1,1,1,1,1,1,1,1,0,1],[1,0,1,0,0,0,2,0,0,0,0,0,1,0,1],[1,0,1,0,1,1,1,1,1,1,1,0,1,0,1],[1,0,0,0,1,3,0,0,0,0,0,0,0,0,1],[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]],
+            10: [[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],[1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,1],[1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1],[1,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0,1],[1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1],[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],[1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1],[1,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1],[1,0,1,0,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,0,1],[1,0,1,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1,0,1],[1,0,1,0,1,0,1,0,1,1,1,1,1,1,1,1,1,1,1,0,1,0,1,0,1],[1,0,0,0,1,0,0,0,1,0,0,0,0,0,0,0,0,0,1,0,0,0,1,3,1],[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]]
+        };
+
+        function drawMaze(level) {
+            mazeContainer.innerHTML = '';
+            const map = mazes[level] || mazes[10];
+            map.forEach((row, y) => {
+                row.forEach((cell, x) => {
+                    if (cell > 0) {
+                        const el = document.createElement('div');
+                        if (cell === 1) el.className = 'spike';
+                        else if (cell === 2) el.className = 'checkpoint';
+                        else if (cell === 3) el.className = 'goal';
+                        el.style.left = (x * 32) + 'px';
+                        el.style.top = (y * 32) + 'px';
+                        mazeContainer.appendChild(el);
+                    }
+                });
+            });
+            levelDisplay.innerText = `LEVEL: ${level}`;
+            winOverlay.style.display = 'none';
+        }
+
+        window.setRole = (r) => {
+            role = r;
+            fog.style.display = (role === 'sightless') ? 'block' : 'none';
+            statusText.innerText = (role === 'sightless') ? "คุณมืดสนิท! ฟังเพื่อนบอกทาง" : "คุณเห็นด่าน! สั่งการแฮมสเตอร์ด่วน";
+        };
+
+        window.resetGame = () => {
+            if(confirm("ต้องการรีเซ็ตด่านกลับไปที่ Level 1?")) {
+                set(gameRef, { x: 32, y: 32, level: 1 }).then(() => location.reload());
+            }
+        };
+
+        function handleMove(dx, dy) {
+            if (role !== 'sightless') return;
+            let x = player.offsetLeft + dx;
+            let y = player.offsetTop + dy;
+            update(gameRef, { x, y });
+        }
+
+        // Keyboard
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowRight') handleMove(10, 0);
+            if (e.key === 'ArrowLeft') handleMove(-10, 0);
+            if (e.key === 'ArrowUp') handleMove(0, -10);
+            if (e.key === 'ArrowDown') handleMove(0, 10);
+        });
+
+        // ปุ่มกดมือถือ (กดค้างเดิน)
+        const btnControls = {
+            'btn-up': [0, -10], 'btn-down': [0, 10],
+            'btn-left': [-10, 0], 'btn-right': [10, 0]
+        };
+        Object.entries(btnControls).forEach(([id, [dx, dy]]) => {
+            const btn = document.getElementById(id);
+            let interval;
+            const start = (e) => { e.preventDefault(); interval = setInterval(() => handleMove(dx, dy), 80); };
+            const stop = () => clearInterval(interval);
+            btn.addEventListener('touchstart', start);
+            btn.addEventListener('touchend', stop);
+            btn.addEventListener('mousedown', start);
+            btn.addEventListener('mouseup', stop);
+        });
+
+        onValue(gameRef, (snap) => {
+            const data = snap.val();
+            if (data) {
+                if (data.level && data.level !== currentLevel) {
+                    currentLevel = data.level;
+                    drawMaze(currentLevel);
+                    lastCheckpoint = {x: 32, y: 32};
+                }
+                player.style.left = data.x + 'px';
+                player.style.top = data.y + 'px';
+                if (role === 'sightless') {
+                    fog.style.left = data.x + 12 + 'px';
+                    fog.style.top = data.y + 12 + 'px';
+                    checkCollisions(data.x, data.y);
+                }
+            } else {
+                set(gameRef, { x: 32, y: 32, level: 1 });
+            }
+        });
+
+        function checkCollisions(px, py) {
+            document.querySelectorAll('.spike').forEach(s => {
+                if (hitTest(px, py, s, 22)) update(gameRef, lastCheckpoint);
+            });
+            document.querySelectorAll('.checkpoint').forEach(c => {
+                if (hitTest(px, py, c, 22)) {
+                    lastCheckpoint = { x: c.offsetLeft, y: c.offsetTop };
+                    c.classList.add('active-checkpoint');
+                }
+            });
+            const goal = document.querySelector('.goal');
+            if (goal && hitTest(px, py, goal, 35)) {
+                if (currentLevel === 10) {
+                    winOverlay.style.display = 'block';
+                    role = 'spectator'; 
+                } else {
+                    update(gameRef, { x: 32, y: 32, level: currentLevel + 1 });
+                }
+            }
+        }
+
+        function hitTest(px, py, target, size) {
+            const tx = target.offsetLeft;
+            const ty = target.offsetTop;
+            return px < tx + size && px + 24 > tx && py < ty + size && py + 24 > ty;
+        }
+
+        drawMaze(1);
+    </script>
+</body>
+</html>
         #fog { 
 
             position: absolute; width: 3000px; height: 3000px; 
