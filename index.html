@@ -3,990 +3,350 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>แฮมมี่ Challenge - Fix Bug</title>
+    <title>แฮมมี่ The Maze Challenge</title>
     <style>
-        body { margin: 0; background: #000; display: flex; flex-direction: column; align-items: center; color: white; font-family: sans-serif; overflow-x: hidden; touch-action: manipulation; }
+        body { 
+            margin: 0; background: #000; display: flex; flex-direction: column; align-items: center; 
+            color: white; font-family: 'Segoe UI', Tahoma, sans-serif; overflow: hidden;
+            touch-action: none;
+        }
         .ui { padding: 10px; text-align: center; background: #111; width: 100%; border-bottom: 2px solid #333; z-index: 1000; }
-        button { padding: 10px 15px; margin: 5px; cursor: pointer; border: none; border-radius: 5px; background: #3498db; color: white; font-weight: bold; }
+        .btn-group { margin: 5px 0; }
+        button { 
+            padding: 10px 15px; margin: 2px; cursor: pointer; border: none; 
+            border-radius: 5px; background: #3498db; color: white; font-weight: bold; 
+        }
+        button.role-sightless { background: #e74c3c; }
+        button.reset-btn { background: #95a5a6; }
+        .hidden { display: none; }
         
         #game-container { 
-            position: relative; width: 800px; height: 544px; 
-            background: #222; border: 3px solid #444; margin-top: 10px; 
+            position: relative; width: 800px; height: 512px; 
+            background: #050505; border: 3px solid #222; margin-top: 10px; 
             overflow: hidden; image-rendering: pixelated; 
-        }
-
-        @media (max-width: 820px) {
-            #game-container { transform: scale(0.45); transform-origin: top center; margin-bottom: -280px; }
+            max-width: 95vw;
         }
         
-        #player { position: absolute; width: 24px; height: 24px; background: #5df542; z-index: 100; border-radius: 50%; transition: 0.05s linear; }
-        .spike { position: absolute; width: 32px; height: 32px; background: #441111; border-radius: 4px; }
-        .checkpoint { position: absolute; width: 32px; height: 32px; background: #111144; opacity: 0.3; border: 1px dashed white; }
-        .goal { position: absolute; width: 32px; height: 32px; background: #f1c40f; box-shadow: 0 0 10px #f1c40f; }
-        
-        #fog { 
-            position: absolute; width: 3000px; height: 3000px; 
-            background: radial-gradient(circle 30px at center, transparent 0%, rgba(0,0,0,1) 90%);
-            pointer-events: none; z-index: 500; display: none; transform: translate(-50%, -50%);
+        #player { 
+            position: absolute; width: 24px; height: 24px; 
+            background: url('hamster.png') no-repeat center/contain;
+            background-color: #5df542; z-index: 100; border-radius: 50%;
         }
+        .spike { position: absolute; width: 32px; height: 32px; background: url('spike.png') no-repeat center/contain; background-color: #441111; }
+        .checkpoint { position: absolute; width: 32px; height: 32px; background: url('checkpoint.png') no-repeat center/contain; background-color: #111144; opacity: 0.4; }
+        .goal { position: absolute; width: 32px; height: 32px; background: url('finish.png') no-repeat center/contain; background-color: #444411; animation: pulse 1s infinite; }
 
-        .mobile-controls { display: flex; flex-direction: column; align-items: center; margin: 20px 0; }
-        .d-pad-row { display: flex; }
-        .ctrl-btn {
-            width: 70px; height: 70px; background: rgba(255,255,255,0.1); border: 2px solid #fff;
-            color: white; font-size: 24px; display: flex; align-items: center; justify-content: center;
-            margin: 5px; border-radius: 50%; -webkit-tap-highlight-color: transparent;
+        @keyframes pulse {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.1); opacity: 0.8; }
+            100% { transform: scale(1); opacity: 1; }
         }
-    </style>
-</head>
-<body>
-
-<div class="ui">
-    <h2 id="level-display">LEVEL: 1</h2>
-    <div class="btn-group">
-        <button onclick="setRole('sightless')" style="background:#e74c3c">เป็นหนู</button>
-        <button onclick="setRole('guide')">เป็นผู้นำทาง</button>
-        <button onclick="resetGame()" style="background:#7f8c8d">Reset</button>
-    </div>
-    <p id="status">เลือกบทบาทก่อนเล่น</p>
-</div>
-
-<div id="game-container">
-    <div id="fog"></div>
-    <div id="player" style="left: 32px; top: 32px;"></div>
-    <div id="maze-container"></div>
-</div>
-
-<div class="mobile-controls">
-    <div class="d-pad-row"><div class="ctrl-btn" id="btn-up">▲</div></div>
-    <div class="d-pad-row">
-        <div class="ctrl-btn" id="btn-left">◀</div>
-        <div class="ctrl-btn" id="btn-down">▼</div>
-        <div class="ctrl-btn" id="btn-right">▶</div>
-    </div>
-</div>
-
-<script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { getDatabase, ref, set, onValue, update } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
-
-    const firebaseConfig = {
-        apiKey: "AIzaSyBX8FyAaCZ8EMMP0nEY9HdVvEUWKnq-VTI",
-        authDomain: "thesightlessgame.firebaseapp.com",
-        databaseURL: "https://thesightlessgame-default-rtdb.asia-southeast1.firebasedatabase.app",
-        projectId: "thesightlessgame",
-        storageBucket: "thesightlessgame.firebasestorage.app",
-        messagingSenderId: "608644663832",
-        appId: "1:608644663832:web:74f24a6b3a9ee2d4ab916d"
-    };
-
-    const app = initializeApp(firebaseConfig);
-    const db = getDatabase(app);
-    const gameRef = ref(db, 'maze/multi_level');
-
-    const player = document.getElementById('player');
-    const mazeContainer = document.getElementById('maze-container');
-    const fog = document.getElementById('fog');
-    
-    let role = '';
-    let currentLevel = 0;
-    let lastCheckpoint = { x: 32, y: 32 };
-
-    const mazes = {
-        1: [[1,1,1,1,1],[1,0,0,0,3],[1,1,1,1,1]],
-        2: [[1,1,1,1,1],[1,0,1,0,1],[1,0,0,0,3],[1,1,1,1,1]],
-        3: [[1,1,1,1,1,1,1],[1,0,0,0,1,0,1],[1,1,1,0,0,0,1],[1,3,0,0,1,1,1],[1,1,1,1,1,1,1]],
-        4: [[1,1,1,1,1,1,1,1,1],[1,0,0,0,0,0,0,0,1],[1,1,1,1,1,1,1,0,1],[1,0,0,0,0,0,0,0,1],[1,0,1,1,1,1,1,1,1],[1,0,0,0,0,0,0,3,1],[1,1,1,1,1,1,1,1,1]],
-        5: [[1,1,1,1,1,1,1,1,1],[1,0,1,0,0,0,1,0,1],[1,0,1,0,1,0,1,0,1],[1,0,0,0,1,0,0,0,1],[1,1,1,0,1,1,1,0,1],[1,3,0,0,0,0,0,0,1],[1,1,1,1,1,1,1,1,1]],
-        6: [[1,1,1,1,1,1,1,1,1,1,1],[1,0,0,0,0,0,0,0,0,0,1],[1,0,1,1,1,1,1,1,1,1,1],[1,0,0,0,0,0,0,0,0,0,1],[1,1,1,1,1,1,1,1,1,0,1],[1,0,0,0,0,0,0,0,0,0,1],[1,0,1,1,1,1,1,1,1,1,1],[1,0,0,0,0,0,0,0,0,3,1],[1,1,1,1,1,1,1,1,1,1,1]],
-        7: [[1,1,1,1,1,1,1,1,1,1,1,1,1],[1,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,1,1,1,1,1,1,1,1,1,0,1],[1,0,1,0,0,0,0,0,0,0,1,0,1],[1,0,1,0,1,1,1,1,1,0,1,0,1],[1,0,0,0,1,3,0,0,0,0,1,0,1],[1,1,1,1,1,1,1,1,1,1,1,1,1]],
-        8: [[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],[1,0,0,0,1,0,
-            databaseURL: "https://thesightlessgame-default-rtdb.asia-southeast1.firebasedatabase.app",
-            projectId: "thesightlessgame",
-            storageBucket: "thesightlessgame.firebasestorage.app",
-            messagingSenderId: "608644663832",
-            appId: "1:608644663832:web:74f24a6b3a9ee2d4ab916d"
-        };
-
-        const app = initializeApp(firebaseConfig);
-        const db = getDatabase(app);
-        const gameRef = ref(db, 'maze/multi_level');
-
-        const player = document.getElementById('player');
-        const fog = document.getElementById('fog');
-        const mazeContainer = document.getElementById('maze-container');
-        const statusText = document.getElementById('status');
-        const levelDisplay = document.getElementById('level-display');
-        const winOverlay = document.getElementById('win-overlay');
-
-        let role = '';
-        let currentLevel = 1;
-        let lastCheckpoint = { x: 32, y: 32 };
-
-        const mazes = {
-            1: [[1,1,1,1,1],[1,0,0,0,3],[1,1,1,1,1]], 
-            2: [[1,1,1,1,1],[1,0,1,0,1],[1,0,0,0,3],[1,1,1,1,1]],
-            3: [[1,1,1,1,1,1,1],[1,0,0,0,1,0,1],[1,1,1,0,0,0,1],[1,3,0,0,1,1,1],[1,1,1,1,1,1,1]],
-            4: [[1,1,1,1,1,1,1,1,1],[1,0,0,0,0,0,0,0,1],[1,1,1,1,1,1,1,0,1],[1,0,0,0,0,0,0,0,1],[1,0,1,1,1,1,1,1,1],[1,0,0,0,0,0,0,3,1],[1,1,1,1,1,1,1,1,1]],
-            5: [[1,1,1,1,1,1,1,1,1],[1,0,1,0,0,0,1,0,1],[1,0,1,0,1,0,1,0,1],[1,0,0,0,1,0,0,0,1],[1,1,1,0,1,1,1,0,1],[1,3,0,0,0,0,0,0,1],[1,1,1,1,1,1,1,1,1]],
-            6: [[1,1,1,1,1,1,1,1,1,1,1],[1,0,0,0,0,0,0,0,0,0,1],[1,0,1,1,1,1,1,1,1,1,1],[1,0,0,0,0,0,0,0,0,0,1],[1,1,1,1,1,1,1,1,1,0,1],[1,0,0,0,0,0,0,0,0,0,1],[1,0,1,1,1,1,1,1,1,1,1],[1,0,0,0,0,0,0,0,0,3,1],[1,1,1,1,1,1,1,1,1,1,1]],
-            7: [[1,1,1,1,1,1,1,1,1,1,1,1,1],[1,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,1,1,1,1,1,1,1,1,1,0,1],[1,0,1,0,0,0,0,0,0,0,1,0,1],[1,0,1,0,1,1,1,1,1,0,1,0,1],[1,0,0,0,1,3,0,0,0,0,1,0,1],[1,1,1,1,1,1,1,1,1,1,1,1,1]],
-            8: [[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],[1,0,0,0,1,0,0,0,0,0,1,0,0,0,1],[1,0,1,0,1,0,1,1,1,0,1,0,1,0,1],[1,0,1,0,0,0,1,2,1,0,0,0,1,0,1],[1,0,1,1,1,1,1,0,1,1,1,0,1,0,1],[1,0,0,0,0,0,0,0,0,0,1,0,0,0,1],[1,1,1,1,1,1,1,1,1,0,1,1,1,3,1],[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]],
-            9: [[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,1,1,1,1,1,1,1,1,1,1,1,0,1],[1,0,1,0,0,0,2,0,0,0,0,0,1,0,1],[1,0,1,0,1,1,1,1,1,1,1,0,1,0,1],[1,0,0,0,1,3,0,0,0,0,0,0,0,0,1],[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]],
-            10: [[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],[1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,1],[1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1],[1,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0,1],[1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1],[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],[1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1],[1,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1],[1,0,1,0,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,0,1],[1,0,1,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1,0,1],[1,0,1,0,1,0,1,0,1,1,1,1,1,1,1,1,1,1,1,0,1,0,1,0,1],[1,0,0,0,1,0,0,0,1,0,0,0,0,0,0,0,0,0,1,0,0,0,1,3,1],[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]]
-        };
-
-        function drawMaze(level) {
-            mazeContainer.innerHTML = '';
-            const map = mazes[level] || mazes[10];
-            map.forEach((row, y) => {
-                row.forEach((cell, x) => {
-                    if (cell > 0) {
-                        const el = document.createElement('div');
-                        if (cell === 1) el.className = 'spike';
-                        else if (cell === 2) el.className = 'checkpoint';
-                        else if (cell === 3) el.className = 'goal';
-                        el.style.left = (x * 32) + 'px';
-                        el.style.top = (y * 32) + 'px';
-                        mazeContainer.appendChild(el);
-                    }
-                });
-            });
-            levelDisplay.innerText = `LEVEL: ${level}`;
-            winOverlay.style.display = 'none';
-        }
-
-        window.setRole = (r) => {
-            role = r;
-            fog.style.display = (role === 'sightless') ? 'block' : 'none';
-            statusText.innerText = (role === 'sightless') ? "คุณมืดสนิท! ฟังเพื่อนบอกทาง" : "คุณเห็นด่าน! สั่งการแฮมสเตอร์ด่วน";
-        };
-
-        window.resetGame = () => {
-            if(confirm("ต้องการรีเซ็ตด่านกลับไปที่ Level 1?")) {
-                set(gameRef, { x: 32, y: 32, level: 1 }).then(() => location.reload());
-            }
-        };
-
-        function handleMove(dx, dy) {
-            if (role !== 'sightless') return;
-            let x = player.offsetLeft + dx;
-            let y = player.offsetTop + dy;
-            update(gameRef, { x, y });
-        }
-
-        // Keyboard
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'ArrowRight') handleMove(10, 0);
-            if (e.key === 'ArrowLeft') handleMove(-10, 0);
-            if (e.key === 'ArrowUp') handleMove(0, -10);
-            if (e.key === 'ArrowDown') handleMove(0, 10);
-        });
-
-        // ปุ่มกดมือถือ (กดค้างเดิน)
-        const btnControls = {
-            'btn-up': [0, -10], 'btn-down': [0, 10],
-            'btn-left': [-10, 0], 'btn-right': [10, 0]
-        };
-        Object.entries(btnControls).forEach(([id, [dx, dy]]) => {
-            const btn = document.getElementById(id);
-            let interval;
-            const start = (e) => { e.preventDefault(); interval = setInterval(() => handleMove(dx, dy), 80); };
-            const stop = () => clearInterval(interval);
-            btn.addEventListener('touchstart', start);
-            btn.addEventListener('touchend', stop);
-            btn.addEventListener('mousedown', start);
-            btn.addEventListener('mouseup', stop);
-        });
-
-        onValue(gameRef, (snap) => {
-            const data = snap.val();
-            if (data) {
-                if (data.level && data.level !== currentLevel) {
-                    currentLevel = data.level;
-                    drawMaze(currentLevel);
-                    lastCheckpoint = {x: 32, y: 32};
-                }
-                player.style.left = data.x + 'px';
-                player.style.top = data.y + 'px';
-                if (role === 'sightless') {
-                    fog.style.left = data.x + 12 + 'px';
-                    fog.style.top = data.y + 12 + 'px';
-                    checkCollisions(data.x, data.y);
-                }
-            } else {
-                set(gameRef, { x: 32, y: 32, level: 1 });
-            }
-        });
-
-        function checkCollisions(px, py) {
-            document.querySelectorAll('.spike').forEach(s => {
-                if (hitTest(px, py, s, 22)) update(gameRef, lastCheckpoint);
-            });
-            document.querySelectorAll('.checkpoint').forEach(c => {
-                if (hitTest(px, py, c, 22)) {
-                    lastCheckpoint = { x: c.offsetLeft, y: c.offsetTop };
-                    c.classList.add('active-checkpoint');
-                }
-            });
-            const goal = document.querySelector('.goal');
-            if (goal && hitTest(px, py, goal, 35)) {
-                if (currentLevel === 10) {
-                    winOverlay.style.display = 'block';
-                    role = 'spectator'; 
-                } else {
-                    update(gameRef, { x: 32, y: 32, level: currentLevel + 1 });
-                }
-            }
-        }
-
-        function hitTest(px, py, target, size) {
-            const tx = target.offsetLeft;
-            const ty = target.offsetTop;
-            return px < tx + size && px + 24 > tx && py < ty + size && py + 24 > ty;
-        }
-
-        drawMaze(1);
-    </script>
-</body>
-</html>
-            databaseURL: "https://thesightlessgame-default-rtdb.asia-southeast1.firebasedatabase.app",
-            projectId: "thesightlessgame",
-            storageBucket: "thesightlessgame.firebasestorage.app",
-            messagingSenderId: "608644663832",
-            appId: "1:608644663832:web:74f24a6b3a9ee2d4ab916d"
-        };
-
-        const app = initializeApp(firebaseConfig);
-        const db = getDatabase(app);
-        const gameRef = ref(db, 'maze/multi_level');
-
-        const player = document.getElementById('player');
-        const fog = document.getElementById('fog');
-        const mazeContainer = document.getElementById('maze-container');
-        const statusText = document.getElementById('status');
-        const levelDisplay = document.getElementById('level-display');
-        const winOverlay = document.getElementById('win-overlay');
-
-        let role = '';
-        let currentLevel = 1;
-        let lastCheckpoint = { x: 32, y: 32 };
-
-        const mazes = {
-            1: [[1,1,1,1,1],[1,0,0,0,3],[1,1,1,1,1]], 
-            2: [[1,1,1,1,1],[1,0,1,0,1],[1,0,0,0,3],[1,1,1,1,1]],
-            3: [[1,1,1,1,1,1,1],[1,0,0,0,1,0,1],[1,1,1,0,0,0,1],[1,3,0,0,1,1,1],[1,1,1,1,1,1,1]],
-            4: [[1,1,1,1,1,1,1,1,1],[1,0,0,0,0,0,0,0,1],[1,1,1,1,1,1,1,0,1],[1,0,0,0,0,0,0,0,1],[1,0,1,1,1,1,1,1,1],[1,0,0,0,0,0,0,3,1],[1,1,1,1,1,1,1,1,1]],
-            5: [[1,1,1,1,1,1,1,1,1],[1,0,1,0,0,0,1,0,1],[1,0,1,0,1,0,1,0,1],[1,0,0,0,1,0,0,0,1],[1,1,1,0,1,1,1,0,1],[1,3,0,0,0,0,0,0,1],[1,1,1,1,1,1,1,1,1]],
-            6: [[1,1,1,1,1,1,1,1,1,1,1],[1,0,0,0,0,0,0,0,0,0,1],[1,0,1,1,1,1,1,1,1,1,1],[1,0,0,0,0,0,0,0,0,0,1],[1,1,1,1,1,1,1,1,1,0,1],[1,0,0,0,0,0,0,0,0,0,1],[1,0,1,1,1,1,1,1,1,1,1],[1,0,0,0,0,0,0,0,0,3,1],[1,1,1,1,1,1,1,1,1,1,1]],
-            7: [[1,1,1,1,1,1,1,1,1,1,1,1,1],[1,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,1,1,1,1,1,1,1,1,1,0,1],[1,0,1,0,0,0,0,0,0,0,1,0,1],[1,0,1,0,1,1,1,1,1,0,1,0,1],[1,0,0,0,1,3,0,0,0,0,1,0,1],[1,1,1,1,1,1,1,1,1,1,1,1,1]],
-            8: [[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],[1,0,0,0,1,0,0,0,0,0,1,0,0,0,1],[1,0,1,0,1,0,1,1,1,0,1,0,1,0,1],[1,0,1,0,0,0,1,2,1,0,0,0,1,0,1],[1,0,1,1,1,1,1,0,1,1,1,0,1,0,1],[1,0,0,0,0,0,0,0,0,0,1,0,0,0,1],[1,1,1,1,1,1,1,1,1,0,1,1,1,3,1],[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]],
-            9: [[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,1,1,1,1,1,1,1,1,1,1,1,0,1],[1,0,1,0,0,0,2,0,0,0,0,0,1,0,1],[1,0,1,0,1,1,1,1,1,1,1,0,1,0,1],[1,0,0,0,1,3,0,0,0,0,0,0,0,0,1],[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]],
-            10: [[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],[1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,1],[1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1],[1,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0,1],[1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1],[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],[1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1],[1,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1],[1,0,1,0,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,0,1],[1,0,1,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1,0,1],[1,0,1,0,1,0,1,0,1,1,1,1,1,1,1,1,1,1,1,0,1,0,1,0,1],[1,0,0,0,1,0,0,0,1,0,0,0,0,0,0,0,0,0,1,0,0,0,1,3,1],[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]]
-        };
-
-        function drawMaze(level) {
-            mazeContainer.innerHTML = '';
-            const map = mazes[level] || mazes[10];
-            map.forEach((row, y) => {
-                row.forEach((cell, x) => {
-                    if (cell > 0) {
-                        const el = document.createElement('div');
-                        if (cell === 1) el.className = 'spike';
-                        else if (cell === 2) el.className = 'checkpoint';
-                        else if (cell === 3) el.className = 'goal';
-                        el.style.left = (x * 32) + 'px';
-                        el.style.top = (y * 32) + 'px';
-                        mazeContainer.appendChild(el);
-                    }
-                });
-            });
-            levelDisplay.innerText = `LEVEL: ${level}`;
-            winOverlay.style.display = 'none';
-        }
-
-        window.setRole = (r) => {
-            role = r;
-            fog.style.display = (role === 'sightless') ? 'block' : 'none';
-            statusText.innerText = (role === 'sightless') ? "คุณมืดสนิท! ฟังเพื่อนบอกทาง" : "คุณเห็นด่าน! สั่งการแฮมสเตอร์ด่วน";
-        };
-
-        window.resetGame = () => {
-            if(confirm("ต้องการรีเซ็ตด่านกลับไปที่ Level 1?")) {
-                set(gameRef, { x: 32, y: 32, level: 1 }).then(() => location.reload());
-            }
-        };
-
-        function handleMove(dx, dy) {
-            if (role !== 'sightless') return;
-            let x = player.offsetLeft + dx;
-            let y = player.offsetTop + dy;
-            update(gameRef, { x, y });
-        }
-
-        // Keyboard
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'ArrowRight') handleMove(10, 0);
-            if (e.key === 'ArrowLeft') handleMove(-10, 0);
-            if (e.key === 'ArrowUp') handleMove(0, -10);
-            if (e.key === 'ArrowDown') handleMove(0, 10);
-        });
-
-        // ปุ่มกดมือถือ (กดค้างเดิน)
-        const btnControls = {
-            'btn-up': [0, -10], 'btn-down': [0, 10],
-            'btn-left': [-10, 0], 'btn-right': [10, 0]
-        };
-        Object.entries(btnControls).forEach(([id, [dx, dy]]) => {
-            const btn = document.getElementById(id);
-            let interval;
-            const start = (e) => { e.preventDefault(); interval = setInterval(() => handleMove(dx, dy), 80); };
-            const stop = () => clearInterval(interval);
-            btn.addEventListener('touchstart', start);
-            btn.addEventListener('touchend', stop);
-            btn.addEventListener('mousedown', start);
-            btn.addEventListener('mouseup', stop);
-        });
-
-        onValue(gameRef, (snap) => {
-            const data = snap.val();
-            if (data) {
-                if (data.level && data.level !== currentLevel) {
-                    currentLevel = data.level;
-                    drawMaze(currentLevel);
-                    lastCheckpoint = {x: 32, y: 32};
-                }
-                player.style.left = data.x + 'px';
-                player.style.top = data.y + 'px';
-                if (role === 'sightless') {
-                    fog.style.left = data.x + 12 + 'px';
-                    fog.style.top = data.y + 12 + 'px';
-                    checkCollisions(data.x, data.y);
-                }
-            } else {
-                set(gameRef, { x: 32, y: 32, level: 1 });
-            }
-        });
-
-        function checkCollisions(px, py) {
-            document.querySelectorAll('.spike').forEach(s => {
-                if (hitTest(px, py, s, 22)) update(gameRef, lastCheckpoint);
-            });
-            document.querySelectorAll('.checkpoint').forEach(c => {
-                if (hitTest(px, py, c, 22)) {
-                    lastCheckpoint = { x: c.offsetLeft, y: c.offsetTop };
-                    c.classList.add('active-checkpoint');
-                }
-            });
-            const goal = document.querySelector('.goal');
-            if (goal && hitTest(px, py, goal, 35)) {
-                if (currentLevel === 10) {
-                    winOverlay.style.display = 'block';
-                    role = 'spectator'; 
-                } else {
-                    update(gameRef, { x: 32, y: 32, level: currentLevel + 1 });
-                }
-            }
-        }
-
-        function hitTest(px, py, target, size) {
-            const tx = target.offsetLeft;
-            const ty = target.offsetTop;
-            return px < tx + size && px + 24 > tx && py < ty + size && py + 24 > ty;
-        }
-
-        drawMaze(1);
-    </script>
-</body>
-</html>
-        #fog { 
-
-            position: absolute; width: 3000px; height: 3000px; 
-
-            background: radial-gradient(circle 20px at center, transparent 0%, rgba(0,0,0,1) 95%);
-
-            pointer-events: none; z-index: 500; display: none;
-
-            left: 0; top: 0; transform: translate(-50%, -50%);
-
-        }
-
-
-
-        /* หน้าจอชนะด่าน 10 (Overlay) */
 
         #win-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.9); display: none;
+            flex-direction: column; align-items: center; justify-content: center;
+            z-index: 2000; text-align: center;
+        }
+        #win-overlay h1 { color: #f1c40f; font-size: 2.5rem; margin-bottom: 10px; text-shadow: 2px 2px #000; padding: 0 20px; }
+        #next-lvl-btn { background: #2ecc71; padding: 15px 40px; font-size: 1.5rem; border-radius: 10px; }
 
-            display: none;
-
-            position: absolute;
-
-            top: 50%;
-
-            left: 50%;
-
-            transform: translate(-50%, -50%);
-
-            background: rgba(0, 0, 0, 0.9);
-
-            color: #f1c40f;
-
-            padding: 30px 50px;
-
-            border: 5px solid #f1c40f;
-
-            border-radius: 15px;
-
-            text-align: center;
-
-            z-index: 2000;
-
-            box-shadow: 0 0 20px #f1c40f;
-
+        .controls-container {
+            display: none; margin-top: 20px;
+            grid-template-areas: ". up ." "left down right"; gap: 15px;
+        }
+        .ctrl-btn {
+            width: 70px; height: 70px; background: #333; border: 2px solid #555; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 28px; user-select: none;
         }
 
-        #win-overlay h1 { margin: 0 0 20px 0; font-size: 40px; }
+        #fog { 
+            position: absolute; width: 3000px; height: 3000px; 
+            background: radial-gradient(circle 14px at center, transparent 0%, rgba(0,0,0,1) 95%);
+            pointer-events: none; z-index: 500; display: none;
+            left: 0; top: 0; transform: translate(-50%, -50%);
+        }
 
-        #win-overlay button { background: #f1c40f; color: black; border: none; padding: 10px 20px; font-weight: bold; cursor: pointer; border-radius: 5px; }
-
+        @media (max-width: 800px) { #game-container { height: 320px; } }
     </style>
-
 </head>
-
 <body>
 
-
+    <div id="win-overlay">
+        <h1 id="win-message">ผ่านเลเวลแล้ว!</h1>
+        <p id="wait-msg" style="font-size: 1.2rem;">รอ "หนู" กดเข้าสู่ด่านถัดไป...</p>
+        <button id="next-lvl-btn" class="hidden" onclick="triggerNextLevel()">ไปด่านถัดไป ▶</button>
+    </div>
 
     <div class="ui">
-
-        <h2 id="level-display">LEVEL: 1</h2>
-
-        <div class="btn-group">
-
-            <button class="role-sightless" onclick="setRole('sightless')">เป็นหนู (มืดสนิท)</button>
-
-            <button onclick="setRole('guide')">เป็นผู้นำทาง (เห็นทาง)</button>
-
+        <h2 id="level-display" style="margin:5px;">LEVEL: 1</h2>
+        <div class="btn-group" id="role-selection">
+            <button id="btn-sightless" class="role-sightless" onclick="setRole('sightless')">เป็นหนู</button>
+            <button id="btn-guide" onclick="setRole('guide')">เป็นผู้นำทาง</button>
         </div>
-
-        <p id="status">กรุณาเลือกบทบาท...</p>
-
+        <button class="reset-btn" onclick="resetGame()">เริ่มใหม่</button>
+        <p id="status" style="margin:5px; font-size: 14px;">กรุณาเลือกบทบาท...</p>
     </div>
 
-
-
-    <div id="game-container"><div class="mobile-controls">
-    <button class="ctrl-btn" id="btn-up">▲</button>
-    <div class="horizontal-btns">
-        <button class="ctrl-btn" id="btn-left">◀</button>
-        <button class="ctrl-btn" id="btn-down">▼</button>
-        <button class="ctrl-btn" id="btn-right">▶</button>
-    </div>
-    </div>
-            
-
+    <div id="game-container">
         <div id="fog"></div>
-
         <div id="player" style="left: 32px; top: 32px;"></div>
-
         <div id="maze-container"></div>
-
-
-
-        <div id="win-overlay">
-
-            <h1>ยินดีด้วยคุณชนะแล้ว!</h1>
-
-            <p>คุณคือสุดยอดนักแก้เขาวงกต</p>
-
-            <button onclick="location.reload()">เล่นใหม่อีกครั้ง</button>
-
-        </div>
-
     </div>
 
+    <div id="mobile-controls" class="controls-container">
+        <div class="ctrl-btn" style="grid-area: up;" id="up">▲</div>
+        <div class="ctrl-btn" style="grid-area: left;" id="left">◀</div>
+        <div class="ctrl-btn" style="grid-area: down;" id="down">▼</div>
+        <div class="ctrl-btn" style="grid-area: right;" id="right">▶</div>
+    </div>
 
-
-    <script type="module">// ฟังก์ชันเคลื่อนที่ร่วม
-function movePlayer(dx, dy) {
-    if (role !== 'sightless') return;
-    let x = player.offsetLeft + dx;
-    let y = player.offsetTop + dy;
-    update(gameRef, { x, y });
-}
-
-// ปุ่มกดบนจอ
-const speed = 15; // เพิ่มความเร็วให้เหมาะสมกับมือถือ
-const buttons = {
-    'btn-up': [0, -speed],
-    'btn-down': [0, speed],
-    'btn-left': [-speed, 0],
-    'btn-right': [speed, 0]
-};
-
-Object.entries(buttons).forEach(([id, [dx, dy]]) => {
-    const btn = document.getElementById(id);
-    let interval;
-    
-    // เริ่มเคลื่อนที่เมื่อกดค้าง
-    const startMove = (e) => {
-        e.preventDefault();
-        interval = setInterval(() => movePlayer(dx, dy), 50);
-    };
-    
-    // หยุดเมื่อปล่อย
-    const stopMove = () => clearInterval(interval);
-
-    btn.addEventListener('touchstart', startMove);
-    btn.addEventListener('touchend', stopMove);
-    btn.addEventListener('mousedown', startMove); // สำหรับเทสในคอม
-    btn.addEventListener('mouseup', stopMove);
-});
-        
-
+    <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-
         import { getDatabase, ref, set, onValue, update } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
-
-
         const firebaseConfig = {
-
             apiKey: "AIzaSyBX8FyAaCZ8EMMP0nEY9HdVvEUWKnq-VTI",
-
             authDomain: "thesightlessgame.firebaseapp.com",
-
             databaseURL: "https://thesightlessgame-default-rtdb.asia-southeast1.firebasedatabase.app",
-
             projectId: "thesightlessgame",
-
             storageBucket: "thesightlessgame.firebasestorage.app",
-
             messagingSenderId: "608644663832",
-
             appId: "1:608644663832:web:74f24a6b3a9ee2d4ab916d"
-
         };
 
-
-
         const app = initializeApp(firebaseConfig);
-
         const db = getDatabase(app);
-
         const gameRef = ref(db, 'maze/multi_level');
 
-
-
         const player = document.getElementById('player');
-
         const fog = document.getElementById('fog');
-
         const mazeContainer = document.getElementById('maze-container');
-
-        const statusText = document.getElementById('status');
-
         const levelDisplay = document.getElementById('level-display');
-
         const winOverlay = document.getElementById('win-overlay');
-
-
+        const winMessage = document.getElementById('win-message');
+        const nextLvlBtn = document.getElementById('next-lvl-btn');
+        const waitMsg = document.getElementById('wait-msg');
 
         let role = '';
-
         let currentLevel = 1;
-
         let lastCheckpoint = { x: 32, y: 32 };
-
-
 
         const mazes = {
-
-            1: [[1,1,1,1,1],[1,0,0,0,3],[1,1,1,1,1]], 
-
-            2: [[1,1,1,1,1],[1,0,1,0,1],[1,0,0,0,3],[1,1,1,1,1]],
-
-            3: [[1,1,1,1,1,1,1],[1,0,0,0,1,0,1],[1,1,1,0,0,0,1],[1,3,0,0,1,1,1],[1,1,1,1,1,1,1]],
-
-            4: [[1,1,1,1,1,1,1,1,1],[1,0,0,0,0,0,0,0,1],[1,1,1,1,1,1,1,0,1],[1,0,0,0,0,0,0,0,1],[1,0,1,1,1,1,1,1,1],[1,0,0,0,0,0,0,3,1],[1,1,1,1,1,1,1,1,1]],
-
-            5: [[1,1,1,1,1,1,1,1,1],[1,0,1,0,0,0,1,0,1],[1,0,1,0,1,0,1,0,1],[1,0,0,0,1,0,0,0,1],[1,1,1,0,1,1,1,0,1],[1,3,0,0,0,0,0,0,1],[1,1,1,1,1,1,1,1,1]],
-
-            6: [[1,1,1,1,1,1,1,1,1,1,1],[1,0,0,0,0,0,0,0,0,0,1],[1,0,1,1,1,1,1,1,1,1,1],[1,0,0,0,0,0,0,0,0,0,1],[1,1,1,1,1,1,1,1,1,0,1],[1,0,0,0,0,0,0,0,0,0,1],[1,0,1,1,1,1,1,1,1,1,1],[1,0,0,0,0,0,0,0,0,3,1],[1,1,1,1,1,1,1,1,1,1,1]],
-
-            7: [[1,1,1,1,1,1,1,1,1,1,1,1,1],[1,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,1,1,1,1,1,1,1,1,1,0,1],[1,0,1,0,0,0,0,0,0,0,1,0,1],[1,0,1,0,1,1,1,1,1,0,1,0,1],[1,0,0,0,1,3,0,0,0,0,1,0,1],[1,1,1,1,1,1,1,1,1,1,1,1,1]],
-
-            8: [[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],[1,0,0,0,1,0,0,0,0,0,1,0,0,0,1],[1,0,1,0,1,0,1,1,1,0,1,0,1,0,1],[1,0,1,0,0,0,1,2,1,0,0,0,1,0,1],[1,0,1,1,1,1,1,0,1,1,1,0,1,0,1],[1,0,0,0,0,0,0,0,0,0,1,0,0,0,1],[1,1,1,1,1,1,1,1,1,0,1,1,1,3,1],[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]],
-
-            9: [[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,1,1,1,1,1,1,1,1,1,1,1,0,1],[1,0,1,0,0,0,2,0,0,0,0,0,1,0,1],[1,0,1,0,1,1,1,1,1,1,1,0,1,0,1],[1,0,0,0,1,3,0,0,0,0,0,0,0,0,1],[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]],
-
-            10: [
-
-                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
-
-                [1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,1],
-
-                [1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1],
-
-                [1,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0,1],
-
-                [1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,0,1],
-
-                [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1],
-
+            1: [[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,0,0,0,0,0,0,0,0,0,2,0,0,0,0,0,0,0,0,3],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]],
+            2: [[1,1,1,1,1,1,1,3,1],
+                [1,0,1,0,0,0,1,0,1],
+                [1,0,1,0,1,0,0,0,1],
+                [1,0,1,2,1,1,1,1,1],
+                [1,0,1,0,1,],
+                [1,0,0,0,1,],
+                [1,1,1,1,1,]],
+            3: [[1,1,1,1,1,1,1,1,1],
+                [1,0,0,0,0,0,0,0,1],
+                [1,1,1,1,1,1,1,0,1],    
+                [1,1,0,0,0,1,0,0,1],
+                [1,1,0,1,0,1,0,1,1],
+                [1,0,0,1,0,1,0,1],
+                [1,2,1,1,0,0,0,1],
+                [1,0,0,0,1,1,1,1,1,1,1,1],      
+                [1,1,1,0,0,0,0,0,0,0,0,1],
+                [1,1,1,1,1,1,1,1,1,1,0,1],
+                [1,1,1,1,1,1,1,1,1,1,3,1]],
+            4: [[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,0,1,1,0,0,0,1,1,1,0,0,0,1,0,3],
+                [1,0,1,1,0,1,0,1,1,1,2,1,0,1,0,1],
+                [1,0,0,0,0,1,0,0,0,0,0,1,0,1,0,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,0,1,0,1],
+                [1,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1],
+                [1,0,1,1,1,1,1,1,1,1,1,1,1,1,0,1],
+                [1,0,0,0,2,0,0,0,0,0,0,0,0,0,0,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]],
+            5: [[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,0,0,0,0,0,0,0,0,0,0,0,2,0,0,0,0,0,0,0,0,0,0,0,1],
                 [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1],
-
-                [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
-
+                [1,0,0,0,0,0,0,0,0,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
                 [1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
-
-                [1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
-
-                [1,0,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1],
-
-                [1,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1],
-
+                [1,0,1,0,0,0,1,0,0,0,0,0,0,0,3],
+                [1,0,1,0,1,0,1,0,1,1,1,1,1,1,1],
+                [1,0,0,0,1,0,0,0,1],
+                [1,1,1,1,1,1,1,1,1]],
+            6: [[1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,0,1,0,1,0,0,0,1,3,1,0,0,1],
+                [1,0,1,0,1,0,1,0,1,0,0,0,0,1],
+                [1,0,0,0,0,0,1,0,1,1,1,1,0,1],
+                [1,1,1,1,1,1,0,0,1,1,0,0,0,1],
+                [1,2,0,0,0,1,0,1,0,0,0,1,1,1],
+                [1,0,1,1,0,0,0,1,1,1,0,1],
+                [1,0,0,0,1,1,1,1,1,1,0,1],
+                [1,1,1,0,0,0,0,0,0,0,0,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1]],
+            7: [[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,1],
+                [1,1,1,1,1,0,0,0,0,1,1,1,1,1,1,0,1],
+                [1,0,0,0,1,1,1,1,1,0,0,0,0,0,0,0,1],
+                [1,0,1,0,0,0,0,0,0,0,1,1,1,1,1,1,1],
+                [1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,3,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]],
+            8: [[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1],
+                [1,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1],
+                [1,0,1,1,1,1,1,1,1,1,1,1,0,1,0,1],
+                [1,0,1,3,0,0,0,0,0,0,0,0,0,1,0,1],
+                [1,0,1,1,1,1,1,1,1,1,1,1,1,1,0,1],
+                [1,0,0,0,0,0,0,0,0,0,0,0,0,0,2,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]],
+            9: [[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,1],
+                [1,0,1,0,1,0,1,0,1,0,1,2,1,0,1,0,1,0,1],
+                [1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1],
+                [1,0,0,0,0,0,0,0,2,0,0,0,0,0,0,0,0,0,1],
+                [1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,3],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]],
+            10: [[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,1,0,0,0,1],
+                [1,1,1,0,1,0,1,1,1,0,1,0,1,1,1,0,1,0,1,0,1,0,1,0,1],
+                [1,0,0,0,1,0,0,0,1,0,1,0,1,0,0,0,1,0,1,0,0,0,1,0,1],
+                [1,0,1,1,1,1,1,0,1,0,1,0,1,0,1,1,1,0,1,0,1,1,1,0,1],
+                [1,0,1,0,0,0,0,0,1,2,0,0,1,0,1,0,0,0,1,0,1,0,0,0,1],
+                [1,0,1,1,1,0,1,1,1,1,1,1,1,0,1,0,1,1,1,1,1,0,1,1,1],
+                [1,0,0,0,1,0,0,1,0,0,0,0,0,0,1,0,0,0,0,0,1,0,1,0,1],
+                [1,1,1,0,1,1,0,1,1,0,1,1,1,1,1,1,1,1,1,0,1,0,0,0,1],
+                [1,0,0,0,1,0,0,0,1,0,0,0,2,0,0,0,0,0,0,0,1,0,1,0,1],
+                [1,0,1,1,1,1,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1],
+                [1,0,1,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1],
                 [1,0,1,0,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,0,1],
-
-                [1,0,1,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1,0,1],
-
-                [1,0,1,0,1,0,1,0,1,1,1,1,1,1,1,1,1,1,1,0,1,0,1,0,1],
-
-                [1,0,0,0,1,0,0,0,1,0,0,0,0,0,0,0,0,0,1,0,0,0,1,3,1],
-
-                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
-
-            ]
-
+                [1,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,3,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]]
         };
-
-
 
         function drawMaze(level) {
-
             mazeContainer.innerHTML = '';
-
             const map = mazes[level] || mazes[10];
-
             map.forEach((row, y) => {
-
                 row.forEach((cell, x) => {
-
                     if (cell > 0) {
-
                         const el = document.createElement('div');
-
                         if (cell === 1) el.className = 'spike';
-
                         else if (cell === 2) el.className = 'checkpoint';
-
                         else if (cell === 3) el.className = 'goal';
-
                         el.style.left = (x * 32) + 'px';
-
                         el.style.top = (y * 32) + 'px';
-
                         mazeContainer.appendChild(el);
-
                     }
-
                 });
-
             });
-
             levelDisplay.innerText = `LEVEL: ${level}`;
-
-            winOverlay.style.display = 'none'; // ซ่อนหน้าจอชนะถ้าเปลี่ยนด่าน
-
         }
 
-
-
-        window.setRole = (r) => {
-
-            role = r;
-
-            fog.style.display = (role === 'sightless') ? 'block' : 'none';
-
-            statusText.innerText = (role === 'sightless') ? "คุณมืดสนิท! ฟังเพื่อนบอกทาง" : "คุณเห็นด่าน! สั่งการแฮมสเตอร์ด่วน";
-
+        window.triggerNextLevel = () => {
+            if (currentLevel >= 10) {
+                set(gameRef, { x: 32, y: 32, level: 1, cleared: false }).then(() => location.reload());
+            } else {
+                update(gameRef, { x: 32, y: 32, level: currentLevel + 1, cleared: false });
+            }
         };
 
+        window.setRole = (r) => {
+            role = r;
+            document.getElementById('btn-sightless').classList.add('hidden');
+            document.getElementById('btn-guide').classList.add('hidden');
+            fog.style.display = (role === 'sightless') ? 'block' : 'none';
+            document.getElementById('mobile-controls').style.display = (role === 'sightless') ? 'grid' : 'none';
+        };
 
-
-        document.addEventListener('keydown', (e) => {
-
-            if (role !== 'sightless') return;
-
-            let x = player.offsetLeft;
-
-            let y = player.offsetTop;
-
-            const speed = 10;
-
-            if (e.key === 'ArrowRight') x += speed;
-
-            if (e.key === 'ArrowLeft') x -= speed;
-
-            if (e.key === 'ArrowUp') y -= speed;
-
-            if (e.key === 'ArrowDown') y += speed;
-
-            update(gameRef, { x, y });
-
-        });
-
-
+        window.resetGame = () => {
+            if(confirm("ต้องการเริ่มใหม่และเลือกบทบาทใหม่ใช่หรือไม่?")) {
+                // แก้ให้รอ Firebase ยืนยันก่อนรีโหลด
+                set(gameRef, { x: 32, y: 32, level: 1, cleared: false }).then(() => {
+                    window.location.href = window.location.href.split('?')[0]; // รีโหลดแบบล้างค่าค้าง
+                });
+            }
+        };
 
         onValue(gameRef, (snap) => {
-
             const data = snap.val();
+            if (!data) return;
 
-            if (data) {
-
-                if (data.level && data.level !== currentLevel) {
-
-                    currentLevel = data.level;
-
-                    drawMaze(currentLevel);
-
-                    lastCheckpoint = {x: 32, y: 32};
-
+            if (data.cleared) {
+                if (data.level >= 10) {
+                    winMessage.innerText = "ยินดีด้วย! คุณผ่านครบทุกด่านแล้ว! 🎉";
+                    nextLvlBtn.innerText = "เริ่มเกมใหม่ 🔄";
+                } else {
+                    winMessage.innerText = `ผ่านเลเวล ${data.level} แล้ว!`;
+                    nextLvlBtn.innerText = "ไปด่านถัดไป ▶";
                 }
 
-                player.style.left = data.x + 'px';
-
-                player.style.top = data.y + 'px';
-
+                winOverlay.style.display = 'flex';
                 if (role === 'sightless') {
-
-                    fog.style.left = data.x + 12 + 'px';
-
-                    fog.style.top = data.y + 12 + 'px';
-
-                    checkCollisions(data.x, data.y);
-
+                    nextLvlBtn.classList.remove('hidden');
+                    waitMsg.classList.add('hidden');
+                } else {
+                    nextLvlBtn.classList.add('hidden');
+                    waitMsg.classList.remove('hidden');
                 }
-
             } else {
-
-                set(gameRef, { x: 32, y: 32, level: 1 });
-
+                winOverlay.style.display = 'none';
             }
 
+            if (data.level && data.level !== currentLevel) {
+                currentLevel = data.level;
+                drawMaze(currentLevel);
+                lastCheckpoint = { x: 32, y: 32 };
+            }
+            player.style.left = data.x + 'px';
+            player.style.top = data.y + 'px';
+            if (role === 'sightless') {
+                fog.style.left = data.x + 12 + 'px';
+                fog.style.top = data.y + 12 + 'px';
+                checkCollisions(data.x, data.y);
+            }
         });
 
-
-
         function checkCollisions(px, py) {
-
             document.querySelectorAll('.spike').forEach(s => {
-
                 if (hitTest(px, py, s, 22)) update(gameRef, lastCheckpoint);
-
             });
-
             document.querySelectorAll('.checkpoint').forEach(c => {
-
-                if (hitTest(px, py, c, 22)) {
-
-                    lastCheckpoint = { x: c.offsetLeft, y: c.offsetTop };
-
-                    c.classList.add('active-checkpoint');
-
-                }
-
+                if (hitTest(px, py, c, 22)) lastCheckpoint = { x: c.offsetLeft, y: c.offsetTop };
             });
-
             const goal = document.querySelector('.goal');
-
-            if (goal && hitTest(px, py, goal, 35)) {
-
-                if (currentLevel === 10) {
-
-                    // ถ้าชนะเลเวล 10 ให้แสดงหน้าจอ Overlay
-
-                    winOverlay.style.display = 'block';
-
-                    role = 'spectator'; 
-
-                } else {
-
-                    alert(`ผ่านเลเวล ${currentLevel} แล้ว!`);
-
-                    update(gameRef, { x: 32, y: 32, level: currentLevel + 1 });
-
-                }
-
+            if (goal && hitTest(px, py, goal, 30)) {
+                update(gameRef, { cleared: true });
             }
-
         }
-
-
 
         function hitTest(px, py, target, size) {
-
             const tx = target.offsetLeft;
-
             const ty = target.offsetTop;
-
             return px < tx + size && px + 24 > tx && py < ty + size && py + 24 > ty;
-
         }
 
-
-
-        drawMaze(1);
-
-    </script>
-
-</body>
-
-</html> ทำให้มันเล่นในมือถือได้ยังไง            authDomain: "thesightlessgame.firebaseapp.com",
-            databaseURL: "https://thesightlessgame-default-rtdb.asia-southeast1.firebasedatabase.app",
-            projectId: "thesightlessgame",
-            storageBucket: "thesightlessgame.firebasestorage.app",
-            messagingSenderId: "608644663832",
-            appId: "1:608644663832:web:74f24a6b3a9ee2d4ab916d"
-        };
-
-        const app = initializeApp(firebaseConfig);
-        const db = getDatabase(app);
-        const gameRef = ref(db, 'maze/multi_level');
-
-        // --- คงตัวแปรเดิมไว้ทั้งหมด ---
-        const player = document.getElementById('player');
-        const fog = document.getElementById('fog');
-        const mazeContainer = document.getElementById('maze-container');
-        const statusText = document.getElementById('status');
-        const levelDisplay = document.getElementById('level-display');
-        const winOverlay = document.getElementById('win-overlay');
-
-        let role = '';
-        let currentLevel = 1;
-        let lastCheckpoint = { x: 32, y: 32 };
-        const mazes = { /* ... ข้อมูลด่านเดิมเป๊ะๆ ... */
-            1: [[1,1,1,1,1],[1,0,0,0,3],[1,1,1,1,1]], 
-            2: [[1,1,1,1,1],[1,0,1,0,1],[1,0,0,0,3],[1,1,1,1,1]],
-            3: [[1,1,1,1,1,1,1],[1,0,0,0,1,0,1],[1,1,1,0,0,0,1],[1,3,0,0,1,1,1],[1,1,1,1,1,1,1]],
-            4: [[1,1,1,1,1,1,1,1,1],[1,0,0,0,0,0,0,0,1],[1,1,1,1,1,1,1,0,1],[1,0,0,0,0,0,0,0,1],[1,0,1,1,1,1,1,1,1],[1,0,0,0,0,0,0,3,1],[1,1,1,1,1,1,1,1,1]],
-            5: [[1,1,1,1,1,1,1,1,1],[1,0,1,0,0,0,1,0,1],[1,0,1,0,1,0,1,0,1],[1,0,0,0,1,0,0,0,1],[1,1,1,0,1,1,1,0,1],[1,3,0,0,0,0,0,0,1],[1,1,1,1,1,1,1,1,1]],
-            6: [[1,1,1,1,1,1,1,1,1,1,1],[1,0,0,0,0,0,0,0,0,0,1],[1,0,1,1,1,1,1,1,1,1,1],[1,0,0,0,0,0,0,0,0,0,1],[1,1,1,1,1,1,1,1,1,0,1],[1,0,0,0,0,0,0,0,0,0,1],[1,0,1,1,1,1,1,1,1,1,1],[1,0,0,0,0,0,0,0,0,3,1],[1,1,1,1,1,1,1,1,1,1,1]],
-            7: [[1,1,1,1,1,1,1,1,1,1,1,1,1],[1,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,1,1,1,1,1,1,1,1,1,0,1],[1,0,1,0,0,0,0,0,0,0,1,0,1],[1,0,1,0,1,1,1,1,1,0,1,0,1],[1,0,0,0,1,3,0,0,0,0,1,0,1],[1,1,1,1,1,1,1,1,1,1,1,1,1]],
-            8: [[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],[1,0,0,0,1,0,0,0,0,0,1,0,0,0,1],[1,0,1,0,1,0,1,1,1,0,1,0,1,0,1],[1,0,1,0,0,0,1,2,1,0,0,0,1,0,1],[1,0,1,1,1,1,1,0,1,1,1,0,1,0,1],[1,0,0,0,0,0,0,0,0,0,1,0,0,0,1],[1,1,1,1,1,1,1,1,1,0,1,1,1,3,1],[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]],
-            9: [[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,1,1,1,1,1,1,1,1,1,1,1,0,1],[1,0,1,0,0,0,2,0,0,0,0,0,1,0,1],[1,0,1,0,1,1,1,1,1,1,1,0,1,0,1],[1,0,0,0,1,3,0,0,0,0,0,0,0,0,1],[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]],
-            10: [[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],[1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,1],[1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1],[1,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0,1],[1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1],[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1],[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],[1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[1,0,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1],[1,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1],[1,0,1,0,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,0,1],[1,0,1,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1,0,1],[1,0,1,0,1,0,1,0,1,1,1,1,1,1,1,1,1,1,1,0,1,0,1,0,1],[1,0,0,0,1,0,0,0,1,0,0,0,0,0,0,0,0,0,1,0,0,0,1,3,1],[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]]
-        };
-
-        // --- คงฟังก์ชันเดิมเป๊ะๆ ---
-        function drawMaze(level) {
-            mazeContainer.innerHTML = '';
-            const map = mazes[level] || mazes[10];
-            map.forEach((row, y) => {
-                row.forEach((cell, x) => {
-                    if (cell > 0) {
-                        const el = document.createElement('div');
-                        if (cell === 1) el.className = 'spike';
-                        else if (cell === 2) el.className = 'checkpoint';
-                        else if (cell === 3) el.className = 'goal';
-                        el.style.left = (x * 32) + 'px';
-                        el.style.top = (y * 32) + 'px';
-                        mazeContainer.appendChild(el);
-                    }
-                });
-            });
-            levelDisplay.innerText = `LEVEL: ${level}`;
-            winOverlay.style.display = 'none';
+        function movePlayer(dx, dy) {
+            if (role !== 'sightless' || winOverlay.style.display === 'flex') return;
+            update(gameRef, { x: player.offsetLeft + dx, y: player.offsetTop + dy });
         }
 
-        window.setRole = (r) => {
-            role = r;
-            fog.style.display = (role === 'sightless') ? 'block' : 'none';
-            statusText.innerText = (role === 'sightless') ? "คุณมืดสนิท! ฟังเพื่อนบอกทาง" : "คุณเห็นด่าน! สั่งการแฮมสเตอร์ด่วน";
-        };
-
-        // --- ส่วนที่เพิ่ม: ฟังก์ชันเคลื่อนที่ (ใช้ร่วมกันทั้ง Keyboard และปุ่มกด) ---
-        function handleMove(key) {
-            if (role !== 'sightless') return;
-            let x = player.offsetLeft;
-            let y = player.offsetTop;
+        window.addEventListener('keydown', (e) => {
             const speed = 10;
-            if (key === 'ArrowRight') x += speed;
-            if (key === 'ArrowLeft') x -= speed;
-            if (key === 'ArrowUp') y -= speed;
-            if (key === 'ArrowDown') y += speed;
-            update(gameRef, { x, y });
-        }
+            if (e.key === 'ArrowUp') movePlayer(0, -speed);
+            if (e.key === 'ArrowDown') movePlayer(0, speed);
+            if (e.key === 'ArrowLeft') movePlayer(-speed, 0);
+            if (e.key === 'ArrowRight') movePlayer(speed, 0);
+        });
 
-        // ฟัง Keyboard (เหมือนเดิม)
-        document.addEventListener('keydown', (e) => handleMove(e.key));
-
-        // ฟังปุ่มกดมือถือ (เพิ่มเข้ามา)
-        const btnControls = {
-            'btn-up': 'ArrowUp', 'btn-down': 'ArrowDown',
-            'btn-left': 'ArrowLeft', 'btn-right': 'ArrowRight'
-        };
-        Object.entries(btnControls).forEach(([id, key]) => {
+        const addControl = (id, dx, dy) => {
             const btn = document.getElementById(id);
-            // แตะปุ่มแล้วขยับ
-            btn.addEventListener('touchstart', (e) => {
-                e.preventDefault(); // กันซูม
-                handleMove(key);
-            });
-            // กดค้าง (Optional: ถ้าต้องการให้กดค้างแล้วเดินได้)
-            let interval;
-            btn.addEventListener('touchstart', () => interval = setInterval(() => handleMove(key), 100));
-            btn.addEventListener('touchend', () => clearInterval(interval));
-        });
-
-        // --- ส่วนที่เหลือ เหมือนเดิมเป๊ะๆ ---
-        onValue(gameRef, (snap) => {
-            const data = snap.val();
-            if (data) {
-                if (data.level && data.level !== currentLevel) {
-                    currentLevel = data.level;
-                    drawMaze(currentLevel);
-                    lastCheckpoint = {x: 32, y: 32};
-                }
-                player.style.left = data.x + 'px';
-                player.style.top = data.y + 'px';
-                if (role === 'sightless') {
-                    fog.style.left = data.x + 12 + 'px';
-                    fog.style.top = data.y + 12 + 'px';
-                    checkCollisions(data.x, data.y);
-                }
-            } else {
-                set(gameRef, { x: 32, y: 32, level: 1 });
-            }
-        });
-
-        function checkCollisions(px, py) {
-            document.querySelectorAll('.spike').forEach(s => {
-                if (hitTest(px, py, s, 22)) update(gameRef, lastCheckpoint);
-            });
-            document.querySelectorAll('.checkpoint').forEach(c => {
-                if (hitTest(px, py, c, 22)) {
-                    lastCheckpoint = { x: c.offsetLeft, y: c.offsetTop };
-                    c.classList.add('active-checkpoint');
-                }
-            });
-            const goal = document.querySelector('.goal');
-            if (goal && hitTest(px, py, goal, 35)) {
-                if (currentLevel === 10) {
-                    winOverlay.style.display = 'block';
-                    role = 'spectator'; 
-                } else {
-                    alert(`ผ่านเลเวล ${currentLevel} แล้ว!`);
-                    update(gameRef, { x: 32, y: 32, level: currentLevel + 1 });
-                }
-            }
-        }
-
-        function hitTest(px, py, target, size) {
-            const tx = target.offsetLeft;
-            const ty = target.offsetTop;
-            return px < tx + size && px + 24 > tx && py < ty + size && py + 24 > ty;
-        }
+            btn.addEventListener('touchstart', (e) => { e.preventDefault(); movePlayer(dx, dy); });
+            btn.addEventListener('mousedown', (e) => { e.preventDefault(); movePlayer(dx, dy); });
+        };
+        addControl('up', 0, -10); addControl('down', 0, 10); addControl('left', -10, 0); addControl('right', 10, 0);
 
         drawMaze(1);
     </script>
